@@ -16,7 +16,7 @@ BASE_HTML = """
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ title }} - Regulations Aggregator</title>
+<title>{{ title }} - Food &amp; Bev Legal Guru</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
          max-width: 960px; margin: 0 auto; padding: 1rem; color: #222; }
@@ -51,7 +51,7 @@ BASE_HTML = """
 </style>
 </head>
 <body>
-<h1>Regulations Aggregator</h1>
+<h1>Food &amp; Bev Legal Guru</h1>
 <nav>
   <a href="{{ url_for('index') }}">Home</a>
   <a href="{{ url_for('fetch') }}">Fetch Updates</a>
