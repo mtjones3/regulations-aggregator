@@ -89,7 +89,7 @@ def normalize_federal(data):
     for item in data:
         attrs = item.get('attributes', {})
         records.append({
-            'id': item.get('id', ''),
+            'id': attrs.get('documentId') or item.get('id', ''),
             'title': attrs.get('title', ''),
             'description': attrs.get('summary', '') or attrs.get('abstract', ''),
             'published_date': attrs.get('postedDate', ''),
