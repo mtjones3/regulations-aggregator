@@ -11,10 +11,9 @@ FEDERAL_API_KEY = os.environ.get('REGULATIONS_GOV_API_KEY', '')
 STATE_API_KEY = os.environ.get('NYS_LEGISLATURE_API_KEY', '')
 DB_FILE = os.environ.get('REGULATIONS_DB_FILE', 'regulations.db')
 
-# Food & beverage industry filter
-FEDERAL_SEARCH_TERM = 'food OR beverage OR dairy OR meat OR poultry OR seafood OR alcohol'
-STATE_KEYWORDS = ['food', 'beverage', 'dairy', 'meat', 'poultry', 'seafood',
-                  'alcohol', 'restaurant', 'nutrition', 'drink']
+# Food & beverage industry filter keywords
+SEARCH_KEYWORDS = ['food', 'beverage', 'dairy', 'meat', 'poultry', 'seafood',
+                   'alcohol', 'restaurant', 'nutrition', 'drink']
 
 
 def init_db():
@@ -111,21 +110,22 @@ def fetch_federal_updates(days_back=7, page_size=10):
         return
     base_url = 'https://api.regulations.gov/v4/documents'
     from_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-    params = {
-        'filter[searchTerm]': FEDERAL_SEARCH_TERM,
-        'filter[postedDate][ge]': from_date,
-        'sort': '-postedDate',
-        'page[size]': page_size,
-        'api_key': FEDERAL_API_KEY,
-    }
-    try:
-        response = requests.get(base_url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json().get('data', [])
-        records = normalize_federal(data)
-        store_records('federal', records, base_url)
-    except requests.RequestException as e:
-        print(f"Federal fetch failed: {e}")
+    for keyword in SEARCH_KEYWORDS:
+        params = {
+            'filter[searchTerm]': keyword,
+            'filter[postedDate][ge]': from_date,
+            'sort': '-postedDate',
+            'page[size]': page_size,
+            'api_key': FEDERAL_API_KEY,
+        }
+        try:
+            response = requests.get(base_url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json().get('data', [])
+            records = normalize_federal(data)
+            store_records('federal', records, base_url)
+        except requests.RequestException as e:
+            print(f"Federal fetch failed for '{keyword}': {e}")
 
 
 # -- State: NYS Open Legislation API ----------------------------------------
@@ -172,7 +172,7 @@ def fetch_state_updates(days_back=7, page_size=10):
         records = [r for r in records if any(
             kw in (r.get('title', '') + ' ' + r.get('description', '') +
                    ' ' + r.get('full_text', '')).lower()
-            for kw in STATE_KEYWORDS
+            for kw in SEARCH_KEYWORDS
         )]
         store_records('state', records, base_url)
     except requests.RequestException as e:
