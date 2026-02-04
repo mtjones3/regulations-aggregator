@@ -58,6 +58,24 @@ python regulations_aggregator.py --sources federal --days-back 30 --page-size 20
 python regulations_aggregator.py --sources state --db-file /path/to/my.db
 ```
 
+## Web Interface
+
+A built-in Flask web app lets you browse and search the database in your browser.
+
+```
+pip install flask
+python app.py
+```
+
+Then visit [http://localhost:5000](http://localhost:5000).
+
+The web interface provides:
+- Paginated list of all regulations, newest first
+- Filter by level (federal/state)
+- Search by keyword across title and description
+- Detail view showing all fields including full text
+- Button to trigger a fresh data fetch from all configured APIs
+
 ## Database Schema
 
 Records are stored in a single `regulations` table:
