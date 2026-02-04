@@ -140,58 +140,27 @@ def test_normalize_federal_empty_input():
 
 def test_normalize_state_extracts_fields():
     items = [{
-        "sourceDateTime": "2026-01-10T12:00:00",
-        "result": {
-            "lawId": "ABC",
-            "docType": "LAW",
-            "docLevelId": "Section 1",
-            "activeDate": "2026-01-10",
-        }
+        "id": {"lawId": "ABC", "activeDate": "2026-01-10"},
+        "contentType": "LAW",
+        "sourceId": "20260110.UPDATE",
+        "sourceDateTime": "2026-01-10T00:00:00",
     }]
     records = ra.normalize_state(items)
     assert len(records) == 1
     assert records[0]["id"] == "nys-ABC-2026-01-10"
     assert records[0]["title"] == "LAW ABC"
-    assert records[0]["description"] == "Section 1"
-    assert records[0]["source_last_modified"] == "2026-01-10T12:00:00"
+    assert records[0]["description"] == "20260110.UPDATE"
+    assert records[0]["source_last_modified"] == "2026-01-10T00:00:00"
 
 
-def test_normalize_state_falls_back_to_item_id():
-    items = [{"id": "FALLBACK", "result": {}}]
+def test_normalize_state_falls_back_to_string_id():
+    items = [{"id": "FALLBACK"}]
     records = ra.normalize_state(items)
     assert "FALLBACK" in records[0]["id"]
 
 
 def test_normalize_state_empty_input():
     assert ra.normalize_state([]) == []
-
-
-# -- normalize_local ---------------------------------------------------------
-
-def test_normalize_local_extracts_fields():
-    items = [{
-        "MatterId": 12345,
-        "MatterTitle": "Local Matter",
-        "MatterBodyName": "City Council",
-        "MatterIntroDate": "2026-01-05",
-        "MatterLastModifiedUtc": "2026-01-06T08:00:00",
-    }]
-    records = ra.normalize_local(items)
-    assert len(records) == 1
-    assert records[0]["id"] == "nyc-12345"
-    assert records[0]["title"] == "Local Matter"
-    assert records[0]["description"] == "City Council"
-    assert records[0]["source_last_modified"] == "2026-01-06T08:00:00"
-
-
-def test_normalize_local_falls_back_to_matter_name():
-    items = [{"MatterId": 1, "MatterName": "Fallback Name"}]
-    records = ra.normalize_local(items)
-    assert records[0]["title"] == "Fallback Name"
-
-
-def test_normalize_local_empty_input():
-    assert ra.normalize_local([]) == []
 
 
 # -- fetch functions (mocked HTTP) -------------------------------------------
@@ -244,13 +213,10 @@ def test_fetch_state_stores_records(mock_get, use_temp_db, monkeypatch):
     mock_get.return_value = _mock_response({
         "result": {
             "items": [{
-                "sourceDateTime": "2026-01-10T12:00:00",
-                "result": {
-                    "lawId": "TAX",
-                    "docType": "LAW",
-                    "docLevelId": "Article 1",
-                    "activeDate": "2026-01-10",
-                }
+                "id": {"lawId": "TAX", "activeDate": "2026-01-10"},
+                "contentType": "LAW",
+                "sourceId": "20260110.UPDATE",
+                "sourceDateTime": "2026-01-10T00:00:00",
             }]
         }
     })
@@ -265,23 +231,3 @@ def test_fetch_state_skips_without_key(mock_get, use_temp_db, monkeypatch):
     mock_get.assert_not_called()
 
 
-@patch("regulations_aggregator.requests.get")
-def test_fetch_local_stores_records(mock_get, use_temp_db, monkeypatch):
-    monkeypatch.setattr(ra, "LOCAL_API_TOKEN", "test-token")
-    mock_get.return_value = _mock_response([{
-        "MatterId": 999,
-        "MatterTitle": "NYC Matter",
-        "MatterBodyName": "Council",
-        "MatterIntroDate": "2026-01-05",
-        "MatterLastModifiedUtc": "2026-01-06",
-    }])
-    ra.fetch_local_updates()
-    assert _count_rows(use_temp_db) == 1
-    assert _get_row(use_temp_db, "nyc-999")["title"] == "NYC Matter"
-
-
-@patch("regulations_aggregator.requests.get")
-def test_fetch_local_skips_without_token(mock_get, use_temp_db, monkeypatch):
-    monkeypatch.setattr(ra, "LOCAL_API_TOKEN", "")
-    ra.fetch_local_updates()
-    mock_get.assert_not_called()

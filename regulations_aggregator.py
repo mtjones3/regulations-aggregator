@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 import requests
@@ -8,7 +9,6 @@ from datetime import datetime, timedelta
 # Configuration via environment variables
 FEDERAL_API_KEY = os.environ.get('REGULATIONS_GOV_API_KEY', '')
 STATE_API_KEY = os.environ.get('NYS_LEGISLATURE_API_KEY', '')
-LOCAL_API_TOKEN = os.environ.get('LEGISTAR_API_TOKEN', '')
 DB_FILE = os.environ.get('REGULATIONS_DB_FILE', 'regulations.db')
 
 
@@ -18,7 +18,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS regulations (
             id TEXT PRIMARY KEY,
-            level TEXT,  -- federal, state, local
+            level TEXT,  -- federal, state
             title TEXT,
             description TEXT,
             published_date TEXT,
@@ -100,7 +100,7 @@ def normalize_federal(data):
     return records
 
 
-def fetch_federal_updates(days_back=7):
+def fetch_federal_updates(days_back=7, page_size=10):
     if not FEDERAL_API_KEY:
         print("Skipping federal: REGULATIONS_GOV_API_KEY not set.")
         return
@@ -109,7 +109,7 @@ def fetch_federal_updates(days_back=7):
     params = {
         'filter[postedDate][ge]': from_date,
         'sort': '-postedDate',
-        'page[size]': 10,
+        'page[size]': page_size,
         'api_key': FEDERAL_API_KEY,
     }
     try:
@@ -128,22 +128,27 @@ def normalize_state(items):
     """Normalize items from the NYS Open Legislation updates API."""
     records = []
     for item in items:
-        result = item.get('result', item)
-        law_id = result.get('lawId', '') or item.get('id', '')
-        doc_id = f"nys-{law_id}-{result.get('activeDate', '')}"
+        item_id = item.get('id', {})
+        if isinstance(item_id, dict):
+            law_id = item_id.get('lawId', '')
+            active_date = item_id.get('activeDate', '')
+        else:
+            law_id = str(item_id)
+            active_date = ''
+        content_type = item.get('contentType', '')
+        doc_id = f"nys-{law_id}-{active_date}"
         records.append({
             'id': doc_id,
-            'title': result.get('docType', '') + ' ' + law_id,
-            'description': result.get('docLevelId', ''),
-            'published_date': result.get('activeDate', ''),
-            'full_text': json.dumps(result),
-            'source_last_modified': item.get('sourceDateTime', '')
-                                    or result.get('activeDate', ''),
+            'title': f"{content_type} {law_id}".strip(),
+            'description': item.get('sourceId', ''),
+            'published_date': active_date,
+            'full_text': json.dumps(item),
+            'source_last_modified': item.get('sourceDateTime', '') or active_date,
         })
     return records
 
 
-def fetch_state_updates(days_back=7):
+def fetch_state_updates(days_back=7, page_size=10):
     if not STATE_API_KEY:
         print("Skipping state: NYS_LEGISLATURE_API_KEY not set.")
         return
@@ -151,7 +156,7 @@ def fetch_state_updates(days_back=7):
     to_date = datetime.now().strftime('%Y-%m-%d')
     base_url = (
         f'https://legislation.nysenate.gov/api/3/laws/updates'
-        f'/{from_date}/{to_date}?limit=10&key={STATE_API_KEY}'
+        f'/{from_date}/{to_date}?limit={page_size}&key={STATE_API_KEY}'
     )
     try:
         response = requests.get(base_url, timeout=30)
@@ -163,66 +168,62 @@ def fetch_state_updates(days_back=7):
         print(f"State fetch failed: {e}")
 
 
-# -- Local: NYC Legistar API -------------------------------------------------
-
-def normalize_local(items):
-    """Normalize items from the NYC Legistar Matters API."""
-    records = []
-    for item in items:
-        matter_id = str(item.get('MatterId', ''))
-        records.append({
-            'id': f"nyc-{matter_id}",
-            'title': item.get('MatterTitle', '') or item.get('MatterName', ''),
-            'description': item.get('MatterBodyName', ''),
-            'published_date': item.get('MatterIntroDate', ''),
-            'full_text': json.dumps(item),
-            'source_last_modified': item.get('MatterLastModifiedUtc', ''),
-        })
-    return records
-
-
-def fetch_local_updates(days_back=7):
-    if not LOCAL_API_TOKEN:
-        print("Skipping local: LEGISTAR_API_TOKEN not set.")
-        return
-    client = 'nyc'
-    from_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%dT%H:%M:%S')
-    base_url = f'https://webapi.legistar.com/v1/{client}/Matters'
-    params = {
-        '$filter': f"MatterLastModifiedUtc gt datetime'{from_date}'",
-        '$orderby': 'MatterLastModifiedUtc desc',
-        '$top': 10,
-        'token': LOCAL_API_TOKEN,
-    }
-    try:
-        response = requests.get(base_url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        records = normalize_local(data)
-        store_records('local', records, base_url)
-    except requests.RequestException as e:
-        print(f"Local fetch failed: {e}")
-
-
 # -- Main --------------------------------------------------------------------
 
-def aggregate_updates():
+VALID_SOURCES = ['federal', 'state']
+
+FETCH_FUNCTIONS = {
+    'federal': fetch_federal_updates,
+    'state': fetch_state_updates,
+}
+
+
+def aggregate_updates(sources=None, days_back=7, page_size=10):
+    sources = sources or VALID_SOURCES
     init_db()
-    print("Fetching federal updates...")
-    fetch_federal_updates()
-    print("Fetching state (NY) updates...")
-    fetch_state_updates()
-    print("Fetching local (NYC) updates...")
-    fetch_local_updates()
-    print("Aggregation complete. Data stored in regulations.db")
+    for source in sources:
+        print(f"Fetching {source} updates...")
+        FETCH_FUNCTIONS[source](days_back=days_back, page_size=page_size)
+    print(f"Aggregation complete. Data stored in {DB_FILE}")
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Fetch regulatory updates from federal and state APIs."
+    )
+    parser.add_argument(
+        '--days-back', type=int, default=7,
+        help="Number of days to look back (default: 7)"
+    )
+    parser.add_argument(
+        '--page-size', type=int, default=10,
+        help="Max results per source (default: 10)"
+    )
+    parser.add_argument(
+        '--sources', nargs='+', choices=VALID_SOURCES, default=None,
+        help="Sources to fetch (default: all configured)"
+    )
+    parser.add_argument(
+        '--db-file', default=None,
+        help="Path to SQLite database (overrides REGULATIONS_DB_FILE)"
+    )
+    return parser.parse_args(argv)
 
 
 if __name__ == "__main__":
-    if not any([FEDERAL_API_KEY, STATE_API_KEY, LOCAL_API_TOKEN]):
+    args = parse_args()
+
+    if args.db_file:
+        DB_FILE = args.db_file
+
+    if not any([FEDERAL_API_KEY, STATE_API_KEY]):
         print("No API keys configured. Set one or more environment variables:")
         print("  REGULATIONS_GOV_API_KEY  - https://api.data.gov/signup/")
         print("  NYS_LEGISLATURE_API_KEY  - https://legislation.nysenate.gov/")
-        print("  LEGISTAR_API_TOKEN       - https://www.legistar.com/")
-        print("  REGULATIONS_DB_FILE      - (optional) path to SQLite DB")
         sys.exit(1)
-    aggregate_updates()
+
+    aggregate_updates(
+        sources=args.sources,
+        days_back=args.days_back,
+        page_size=args.page_size,
+    )
