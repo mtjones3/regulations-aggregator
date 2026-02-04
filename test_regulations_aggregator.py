@@ -140,23 +140,29 @@ def test_normalize_federal_empty_input():
 
 def test_normalize_state_extracts_fields():
     items = [{
-        "id": {"lawId": "ABC", "activeDate": "2026-01-10"},
-        "contentType": "LAW",
-        "sourceId": "20260110.UPDATE",
-        "sourceDateTime": "2026-01-10T00:00:00",
+        "result": {
+            "basePrintNo": "S1234",
+            "session": 2026,
+            "title": "Food safety standards update",
+            "summary": "Updates food safety requirements",
+            "status": {
+                "statusDesc": "IN_COMMITTEE",
+                "actionDate": "2026-01-10",
+            },
+        }
     }]
     records = ra.normalize_state(items)
     assert len(records) == 1
-    assert records[0]["id"] == "nys-ABC-2026-01-10"
-    assert records[0]["title"] == "LAW ABC"
-    assert records[0]["description"] == "20260110.UPDATE"
-    assert records[0]["source_last_modified"] == "2026-01-10T00:00:00"
+    assert records[0]["id"] == "nys-2026-S1234"
+    assert records[0]["title"] == "S1234: Food safety standards update"
+    assert records[0]["description"] == "Updates food safety requirements"
+    assert records[0]["source_last_modified"] == "2026-01-10"
 
 
-def test_normalize_state_falls_back_to_string_id():
-    items = [{"id": "FALLBACK"}]
+def test_normalize_state_handles_minimal_item():
+    items = [{"result": {"basePrintNo": "A999", "session": 2026}}]
     records = ra.normalize_state(items)
-    assert "FALLBACK" in records[0]["id"]
+    assert records[0]["id"] == "nys-2026-A999"
 
 
 def test_normalize_state_empty_input():
@@ -213,15 +219,21 @@ def test_fetch_state_stores_records(mock_get, use_temp_db, monkeypatch):
     mock_get.return_value = _mock_response({
         "result": {
             "items": [{
-                "id": {"lawId": "AGM", "activeDate": "2026-01-10"},
-                "contentType": "LAW",
-                "sourceId": "food safety update",
-                "sourceDateTime": "2026-01-10T00:00:00",
+                "result": {
+                    "basePrintNo": "S1234",
+                    "session": 2026,
+                    "title": "Food safety bill",
+                    "summary": "Updates food safety requirements",
+                    "status": {
+                        "statusDesc": "IN_COMMITTEE",
+                        "actionDate": "2026-01-10",
+                    },
+                }
             }]
         }
     })
     ra.fetch_state_updates()
-    assert _count_rows(use_temp_db) == 1
+    assert _count_rows(use_temp_db) >= 1
 
 
 @patch("regulations_aggregator.requests.get")

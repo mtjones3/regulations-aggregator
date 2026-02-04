@@ -131,25 +131,25 @@ def fetch_federal_updates(days_back=7, page_size=10):
 # -- State: NYS Open Legislation API ----------------------------------------
 
 def normalize_state(items):
-    """Normalize items from the NYS Open Legislation updates API."""
+    """Normalize bill search results from the NYS Open Legislation API."""
     records = []
     for item in items:
-        item_id = item.get('id', {})
-        if isinstance(item_id, dict):
-            law_id = item_id.get('lawId', '')
-            active_date = item_id.get('activeDate', '')
-        else:
-            law_id = str(item_id)
-            active_date = ''
-        content_type = item.get('contentType', '')
-        doc_id = f"nys-{law_id}-{active_date}"
+        bill = item.get('result', {})
+        print_no = bill.get('basePrintNo', '')
+        session = bill.get('session', '')
+        title = bill.get('title', '')
+        summary = bill.get('summary', '')
+        status = bill.get('status', {})
+        status_desc = status.get('statusDesc', '') if isinstance(status, dict) else ''
+        action_date = status.get('actionDate', '') if isinstance(status, dict) else ''
+        doc_id = f"nys-{session}-{print_no}"
         records.append({
             'id': doc_id,
-            'title': f"{content_type} {law_id}".strip(),
-            'description': item.get('sourceId', ''),
-            'published_date': active_date,
-            'full_text': json.dumps(item),
-            'source_last_modified': item.get('sourceDateTime', '') or active_date,
+            'title': f"{print_no}: {title}".strip(),
+            'description': summary,
+            'published_date': action_date or '',
+            'full_text': json.dumps(bill),
+            'source_last_modified': action_date or '',
         })
     return records
 
@@ -158,25 +158,21 @@ def fetch_state_updates(days_back=7, page_size=10):
     if not STATE_API_KEY:
         print("Skipping state: NYS_LEGISLATURE_API_KEY not set.")
         return
-    from_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-    to_date = datetime.now().strftime('%Y-%m-%d')
-    base_url = (
-        f'https://legislation.nysenate.gov/api/3/laws/updates'
-        f'/{from_date}/{to_date}?limit={page_size}&key={STATE_API_KEY}'
-    )
-    try:
-        response = requests.get(base_url, timeout=30)
-        response.raise_for_status()
-        data = response.json().get('result', {}).get('items', [])
-        records = normalize_state(data)
-        records = [r for r in records if any(
-            kw in (r.get('title', '') + ' ' + r.get('description', '') +
-                   ' ' + r.get('full_text', '')).lower()
-            for kw in SEARCH_KEYWORDS
-        )]
-        store_records('state', records, base_url)
-    except requests.RequestException as e:
-        print(f"State fetch failed: {e}")
+    base_url = 'https://legislation.nysenate.gov/api/3/bills'
+    session_year = datetime.now().year
+    for keyword in SEARCH_KEYWORDS:
+        url = (
+            f'{base_url}/{session_year}/search'
+            f'?term={keyword}&limit={page_size}&key={STATE_API_KEY}'
+        )
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            data = response.json().get('result', {}).get('items', [])
+            records = normalize_state(data)
+            store_records('state', records, base_url)
+        except requests.RequestException as e:
+            print(f"State fetch failed for '{keyword}': {e}")
 
 
 # -- Main --------------------------------------------------------------------
