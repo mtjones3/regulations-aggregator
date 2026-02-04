@@ -213,9 +213,9 @@ def test_fetch_state_stores_records(mock_get, use_temp_db, monkeypatch):
     mock_get.return_value = _mock_response({
         "result": {
             "items": [{
-                "id": {"lawId": "TAX", "activeDate": "2026-01-10"},
+                "id": {"lawId": "AGM", "activeDate": "2026-01-10"},
                 "contentType": "LAW",
-                "sourceId": "20260110.UPDATE",
+                "sourceId": "food safety update",
                 "sourceDateTime": "2026-01-10T00:00:00",
             }]
         }

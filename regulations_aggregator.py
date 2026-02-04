@@ -11,6 +11,11 @@ FEDERAL_API_KEY = os.environ.get('REGULATIONS_GOV_API_KEY', '')
 STATE_API_KEY = os.environ.get('NYS_LEGISLATURE_API_KEY', '')
 DB_FILE = os.environ.get('REGULATIONS_DB_FILE', 'regulations.db')
 
+# Food & beverage industry filter
+FEDERAL_SEARCH_TERM = 'food OR beverage OR dairy OR meat OR poultry OR seafood OR alcohol'
+STATE_KEYWORDS = ['food', 'beverage', 'dairy', 'meat', 'poultry', 'seafood',
+                  'alcohol', 'restaurant', 'nutrition', 'drink']
+
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -107,6 +112,7 @@ def fetch_federal_updates(days_back=7, page_size=10):
     base_url = 'https://api.regulations.gov/v4/documents'
     from_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     params = {
+        'filter[searchTerm]': FEDERAL_SEARCH_TERM,
         'filter[postedDate][ge]': from_date,
         'sort': '-postedDate',
         'page[size]': page_size,
@@ -163,6 +169,11 @@ def fetch_state_updates(days_back=7, page_size=10):
         response.raise_for_status()
         data = response.json().get('result', {}).get('items', [])
         records = normalize_state(data)
+        records = [r for r in records if any(
+            kw in (r.get('title', '') + ' ' + r.get('description', '') +
+                   ' ' + r.get('full_text', '')).lower()
+            for kw in STATE_KEYWORDS
+        )]
         store_records('state', records, base_url)
     except requests.RequestException as e:
         print(f"State fetch failed: {e}")
