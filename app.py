@@ -17,46 +17,77 @@ BASE_HTML = """
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ title }} - Food &amp; Bev Legal Guru</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         max-width: 960px; margin: 0 auto; padding: 1rem; color: #222; }
-  h1 { margin-bottom: 0.25rem; }
-  a { color: #0057b7; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  nav { margin-bottom: 1rem; font-size: 0.9rem; }
-  nav a { margin-right: 1rem; }
+         max-width: 960px; margin: 0 auto; padding: 0; color: #222; background: #1a1a2e; }
+  .banner { position: relative; width: 100%; height: 220px; overflow: hidden;
+            background: url('{{ url_for("static", filename="nighthawks.jpg") }}') center center / cover no-repeat;
+            margin-bottom: 0; }
+  .banner-overlay { position: absolute; inset: 0;
+                    background: linear-gradient(to bottom, rgba(10,10,30,0.45), rgba(10,10,30,0.75)); }
+  .banner-text { position: absolute; inset: 0; display: flex; flex-direction: column;
+                 align-items: center; justify-content: center; }
+  .banner h1 { font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+               font-size: 2.8rem; font-weight: 700; color: #f0e6d3;
+               text-shadow: 2px 2px 8px rgba(0,0,0,0.7); margin: 0; letter-spacing: 0.04em; }
+  .banner .subtitle { font-family: 'Playfair Display', Georgia, serif; font-style: italic;
+                      font-size: 1rem; color: #d4c5a9; margin-top: 0.3rem;
+                      text-shadow: 1px 1px 4px rgba(0,0,0,0.6); }
+  .content { background: #faf8f5; padding: 1rem 2rem 2rem; min-height: 60vh; }
+  a { color: #8b4513; text-decoration: none; }
+  a:hover { text-decoration: underline; color: #5c2d05; }
+  nav { margin-bottom: 1rem; font-size: 0.9rem; padding: 0.75rem 0;
+        border-bottom: 1px solid #e0d8cc; }
+  nav a { margin-right: 1.2rem; color: #5c3d1a; font-weight: 500; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
-  th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ddd; }
-  th { background: #f5f5f5; }
-  tr:hover { background: #fafafa; }
+  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid #e0d8cc; }
+  th { background: #f0ebe0; color: #3d2b1f; font-size: 0.85rem; text-transform: uppercase;
+       letter-spacing: 0.05em; }
+  tr:hover { background: #f5f0e8; }
   .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px;
            font-size: 0.8rem; color: #fff; }
-  .badge-federal { background: #2b6cb0; }
-  .badge-state { background: #2f855a; }
+  .badge-federal { background: #2b4a7c; }
+  .badge-state { background: #4a6741; }
   .search-bar { margin-bottom: 1rem; }
-  .search-bar input[type=text] { padding: 0.4rem; width: 250px; }
-  .search-bar button { padding: 0.4rem 0.8rem; }
+  .search-bar input[type=text] { padding: 0.45rem 0.6rem; width: 260px; border: 1px solid #c9bfa8;
+                                  border-radius: 4px; background: #fff; }
+  .search-bar button { padding: 0.45rem 0.9rem; background: #5c3d1a; color: #fff; border: none;
+                       border-radius: 4px; cursor: pointer; }
+  .search-bar button:hover { background: #3d2b1f; }
   .filters a, .filters span { margin-right: 0.75rem; font-size: 0.9rem; }
-  .filters .active { font-weight: bold; }
+  .filters .active { font-weight: bold; color: #3d2b1f; }
   .pagination { margin-top: 1rem; }
   .pagination a, .pagination span { margin-right: 0.5rem; }
-  .detail-table td:first-child { font-weight: bold; width: 160px; vertical-align: top; }
-  pre { background: #f5f5f5; padding: 0.75rem; overflow-x: auto; font-size: 0.85rem;
-        max-height: 400px; overflow-y: auto; }
-  .btn { display: inline-block; padding: 0.4rem 1rem; background: #0057b7; color: #fff;
-         border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
-  .btn:hover { background: #003d82; text-decoration: none; }
-  .msg { padding: 0.5rem 1rem; background: #e6ffed; border: 1px solid #b7e1c1;
+  .detail-table td:first-child { font-weight: bold; width: 160px; vertical-align: top; color: #5c3d1a; }
+  pre { background: #f0ebe0; padding: 0.75rem; overflow-x: auto; font-size: 0.85rem;
+        max-height: 400px; overflow-y: auto; border: 1px solid #d4c5a9; border-radius: 4px; }
+  .btn { display: inline-block; padding: 0.5rem 1.2rem; background: #5c3d1a; color: #f0e6d3;
+         border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem;
+         font-family: 'Playfair Display', Georgia, serif; }
+  .btn:hover { background: #3d2b1f; text-decoration: none; }
+  .msg { padding: 0.5rem 1rem; background: #e8f0e0; border: 1px solid #b7c9a8;
          border-radius: 4px; margin-bottom: 1rem; }
+  h2, h3 { font-family: 'Playfair Display', Georgia, serif; color: #3d2b1f; }
 </style>
 </head>
 <body>
-<h1>Food &amp; Bev Legal Guru</h1>
+<div class="banner">
+  <div class="banner-overlay"></div>
+  <div class="banner-text">
+    <h1>Food &amp; Bev Legal Guru</h1>
+    <div class="subtitle">Federal &amp; State Regulatory Intelligence</div>
+  </div>
+</div>
+<div class="content">
 <nav>
   <a href="{{ url_for('index') }}">Home</a>
   <a href="{{ url_for('fetch') }}">Fetch Updates</a>
 </nav>
 {% block content %}{% endblock %}
+</div>
 </body>
 </html>
 """
