@@ -3,7 +3,8 @@
 import sqlite3
 from flask import Flask, request, redirect, url_for, render_template_string
 
-from regulations_aggregator import DB_FILE, init_db, aggregate_updates
+from datetime import date
+from regulations_aggregator import DB_FILE, init_db, aggregate_updates, generate_all_briefs
 
 app = Flask(__name__)
 init_db()
@@ -85,6 +86,7 @@ BASE_HTML = """
 <nav>
   <a href="{{ url_for('index') }}">Home</a>
   <a href="{{ url_for('fetch') }}">Fetch Updates</a>
+  <a href="{{ url_for('brief') }}">Monday Brief</a>
 </nav>
 {% block content %}{% endblock %}
 </div>
@@ -155,6 +157,71 @@ FETCH_HTML = (
     "</form>"
     "{% endblock %}"
 )
+
+BRIEF_HTML = """
+{% extends "base" %}
+{% block content %}
+<style>
+  .brief-header { display: flex; justify-content: space-between; align-items: center;
+                  margin-bottom: 1.5rem; }
+  .brief-header h2 { margin: 0; }
+  .brief-date { font-family: 'Playfair Display', Georgia, serif; font-style: italic;
+                color: #8b7355; font-size: 1rem; }
+  .brief-card { background: #fff; border: 1px solid #e0d8cc; border-radius: 6px;
+                padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .brief-card h3 { margin: 0 0 0.25rem; font-size: 1.1rem; }
+  .brief-card .brief-meta { font-size: 0.85rem; color: #8b7355; margin-bottom: 0.75rem; }
+  .brief-section { margin-bottom: 0.6rem; }
+  .brief-section strong { display: block; font-size: 0.85rem; text-transform: uppercase;
+                          letter-spacing: 0.04em; color: #5c3d1a; margin-bottom: 0.15rem; }
+  .brief-section p { margin: 0; line-height: 1.5; }
+  .empty-state { text-align: center; padding: 3rem 1rem; color: #8b7355; }
+  .empty-state p { font-size: 1.1rem; }
+</style>
+<div class="brief-header">
+  <div>
+    <h2>Monday Morning Brief</h2>
+    <span class="brief-date">{{ today }}</span>
+  </div>
+  <form method="post" action="{{ url_for('brief_generate') }}">
+    <button class="btn" type="submit">Generate Briefs</button>
+  </form>
+</div>
+
+{% if message %}<div class="msg">{{ message }}</div>{% endif %}
+
+{% if briefs %}
+  {% for b in briefs %}
+  <div class="brief-card">
+    <h3>{{ b.title or b.regulation_id }}</h3>
+    <div class="brief-meta">
+      <span class="badge badge-{{ b.level }}">{{ b.level }}</span>
+      &middot; {{ b.published_date or 'No date' }}
+      &middot; Brief generated {{ b.generated_at[:10] }}
+    </div>
+    <div class="brief-section">
+      <strong>What This Means For You</strong>
+      <p>{{ b.business_impact }}</p>
+    </div>
+    <div class="brief-section">
+      <strong>What You Need To Do</strong>
+      <p>{{ b.action_required }}</p>
+    </div>
+    <div class="brief-section">
+      <strong>Penalty for Non-Compliance</strong>
+      <p>{{ b.penalty }}</p>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">
+    <p>No briefs generated yet.</p>
+    <p>Click <strong>Generate Briefs</strong> to analyze recent regulations.</p>
+  </div>
+{% endif %}
+{% endblock %}
+"""
 
 
 def get_db():
@@ -243,6 +310,31 @@ def fetch():
 def do_fetch():
     aggregate_updates()
     return redirect(url_for("index", message="Fetch complete."))
+
+
+@app.route("/brief")
+def brief():
+    message = request.args.get("message", "")
+    conn = get_db()
+    rows = conn.execute('''
+        SELECT r.id AS regulation_id, r.level, r.title, r.published_date,
+               b.business_impact, b.action_required, b.penalty, b.generated_at
+        FROM briefs b
+        JOIN regulations r ON r.id = b.regulation_id
+        ORDER BY b.generated_at DESC
+    ''').fetchall()
+    conn.close()
+
+    today = date.today().strftime("%A, %B %d, %Y")
+    return render(BRIEF_HTML, title="Monday Brief", briefs=rows,
+                  today=today, message=message)
+
+
+@app.route("/brief/generate", methods=["POST"])
+def brief_generate():
+    count = generate_all_briefs()
+    msg = f"Generated {count} new brief(s)." if count else "No new regulations to analyze."
+    return redirect(url_for("brief", message=msg))
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 # Configuration via environment variables
 FEDERAL_API_KEY = os.environ.get('REGULATIONS_GOV_API_KEY', '')
 STATE_API_KEY = os.environ.get('NYS_LEGISLATURE_API_KEY', '')
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 DB_FILE = os.environ.get('REGULATIONS_DB_FILE', 'regulations.db')
 
 # Food & beverage industry filter keywords
@@ -30,6 +31,16 @@ def init_db():
             source_url TEXT,
             source_last_modified TEXT,
             last_updated TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS briefs (
+            regulation_id TEXT PRIMARY KEY,
+            business_impact TEXT,
+            action_required TEXT,
+            penalty TEXT,
+            generated_at TEXT,
+            FOREIGN KEY (regulation_id) REFERENCES regulations(id)
         )
     ''')
     conn.commit()
@@ -173,6 +184,93 @@ def fetch_state_updates(days_back=7, page_size=10):
             store_records('state', records, base_url)
         except requests.RequestException as e:
             print(f"State fetch failed for '{keyword}': {e}")
+
+
+# -- AI Briefs ---------------------------------------------------------------
+
+def generate_brief(record):
+    """Call Claude to extract business impact, action required, and penalty."""
+    if not ANTHROPIC_API_KEY:
+        print("Skipping brief generation: ANTHROPIC_API_KEY not set.")
+        return None
+
+    import anthropic
+
+    full_text = (record.get('full_text') or '')[:3000]
+    prompt = (
+        "You are a regulatory compliance analyst for the food & beverage industry.\n"
+        "Analyze this regulation and respond in JSON with exactly three fields:\n"
+        "- business_impact: 1-2 sentences on what this means for a food & bev business owner\n"
+        "- action_required: Specific steps the business owner needs to take\n"
+        "- penalty: What happens if they don't comply (fines, license revocation, etc.), "
+        "or \"Not specified\" if unclear\n\n"
+        f"Title: {record.get('title', '')}\n"
+        f"Description: {record.get('description', '')}\n"
+        f"Full text: {full_text}\n"
+    )
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    message = client.messages.create(
+        model="claude-3-5-haiku-latest",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    text = message.content[0].text
+    # Strip markdown code fences if present
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    return json.loads(text)
+
+
+def generate_all_briefs():
+    """Find regulations without a brief and generate one for each."""
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT r.* FROM regulations r
+        LEFT JOIN briefs b ON r.id = b.regulation_id
+        WHERE b.regulation_id IS NULL
+    ''')
+    rows = cursor.fetchall()
+
+    count = 0
+    for row in rows:
+        record = dict(row)
+        try:
+            result = generate_brief(record)
+        except Exception as e:
+            print(f"Brief generation failed for {record['id']}: {e}")
+            continue
+
+        if result is None:
+            break
+
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            INSERT OR REPLACE INTO briefs
+                (regulation_id, business_impact, action_required, penalty, generated_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            record['id'],
+            result.get('business_impact', ''),
+            result.get('action_required', ''),
+            result.get('penalty', ''),
+            now,
+        ))
+        conn.commit()
+        count += 1
+        print(f"Brief generated for: {record.get('title', record['id'])}")
+
+    conn.close()
+    print(f"Generated {count} brief(s).")
+    return count
 
 
 # -- Main --------------------------------------------------------------------
