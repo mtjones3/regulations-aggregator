@@ -227,17 +227,19 @@ def generate_brief(record):
     return json.loads(text)
 
 
-def generate_all_briefs():
-    """Find regulations without a brief and generate one for each."""
+def generate_all_briefs(days_back=14):
+    """Find recent regulations without a brief and generate one for each."""
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
+    cutoff = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     cursor.execute('''
         SELECT r.* FROM regulations r
         LEFT JOIN briefs b ON r.id = b.regulation_id
         WHERE b.regulation_id IS NULL
-    ''')
+          AND r.published_date >= ?
+    ''', (cutoff,))
     rows = cursor.fetchall()
 
     count = 0

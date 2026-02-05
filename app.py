@@ -3,7 +3,7 @@
 import sqlite3
 from flask import Flask, request, redirect, url_for, render_template_string
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from regulations_aggregator import DB_FILE, init_db, aggregate_updates, generate_all_briefs
 
 app = Flask(__name__)
@@ -315,14 +315,16 @@ def do_fetch():
 @app.route("/brief")
 def brief():
     message = request.args.get("message", "")
+    cutoff = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d')
     conn = get_db()
     rows = conn.execute('''
         SELECT r.id AS regulation_id, r.level, r.title, r.published_date,
                b.business_impact, b.action_required, b.penalty, b.generated_at
         FROM briefs b
         JOIN regulations r ON r.id = b.regulation_id
-        ORDER BY b.generated_at DESC
-    ''').fetchall()
+        WHERE r.published_date >= ?
+        ORDER BY r.published_date DESC
+    ''', (cutoff,)).fetchall()
     conn.close()
 
     today = date.today().strftime("%A, %B %d, %Y")
